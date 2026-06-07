@@ -13,7 +13,7 @@ denoBuildHook() {
 
     package_name=$(jq -r '.name' deno.json)
     if [ "$package_name" == "null" ]; then
-      package_name="$name"
+      package_name="${pname:-$name}"
     fi
 
     deno compile \

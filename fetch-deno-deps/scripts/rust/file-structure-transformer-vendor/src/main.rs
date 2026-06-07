@@ -27,6 +27,13 @@ struct CommonLockFormatOut {
     //meta: Option<Value>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct RedirectOut {
+    url: String,
+    location: String,
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
@@ -34,6 +41,8 @@ struct Args {
     common_lock_jsr_path: PathBuf,
     #[arg(short, long)]
     common_lock_https_path: PathBuf,
+    #[arg(long)]
+    common_lock_redirects_path: PathBuf,
     #[arg(short, long)]
     deno_dir_path: PathBuf,
     #[arg(short, long)]
@@ -68,6 +77,30 @@ fn read_common_lock(common_lock_path: &PathBuf) -> Result<Vec<CommonLockFormatOu
     Ok(common_lock)
 }
 
+fn read_redirects(redirects_path: &PathBuf) -> Result<Vec<RedirectOut>, anyhow::Error> {
+    let mut file = File::open(redirects_path).context("failed to open redirects map")?;
+    let redirects: Vec<RedirectOut> =
+        serde_json::from_reader(&mut file).context("failed to parse redirects map")?;
+    Ok(redirects)
+}
+
+fn add_redirects_to_cache(
+    redirects: Vec<RedirectOut>,
+    cache: &LocalHttpCache<RealSys>,
+) -> Result<(), anyhow::Error> {
+    for redirect in redirects {
+        let url = Url::parse(&redirect.url)
+            .with_context(|| format!("failed to parse redirect URL {}", redirect.url))?;
+        let mut headers = HashMap::new();
+        headers.insert("location".to_string(), redirect.location.clone());
+
+        cache
+            .set(&url, headers, &[])
+            .with_context(|| format!("failed to set redirect {} in local cache", redirect.url))?;
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -97,6 +130,9 @@ fn main() -> Result<()> {
         .context("failed to get base path for common_lock_https_path")
         .unwrap();
     add_common_lock_to_cache(common_lock_https, base_path, &cache)?;
+
+    let redirects = read_redirects(&args.common_lock_redirects_path)?;
+    add_redirects_to_cache(redirects, &cache)?;
 
     Ok(())
 }

@@ -23,7 +23,13 @@ type LockfileTransformerConfig = {
   commonLockJsrPath: PathString;
   commonLockNpmPath: PathString;
   commonLockHttpsPath: PathString;
+  commonLockRedirectsPath: PathString;
   lockfile: DenoLock;
+};
+
+type RedirectOut = {
+  url: UrlString;
+  location: UrlString;
 };
 
 type Config = LockfileTransformerConfig;
@@ -33,6 +39,7 @@ function getConfig(): Config {
     commonLockJsrPath: null;
     commonLockHttpsPath: null;
     commonLockNpmPath: null;
+    commonLockRedirectsPath: null;
   }
 
   const unparsedArgs: UnparsedArgs<ArgNames> = {
@@ -52,6 +59,10 @@ function getConfig(): Config {
       flag: "--common-lock-npm-path",
       defaultValue: "",
     },
+    commonLockRedirectsPath: {
+      flag: "--common-lock-redirects-path",
+      defaultValue: "",
+    },
   };
 
   const parsedArgs: ParsedArgs<ArgNames> = parseArgs(unparsedArgs, Deno.args);
@@ -65,6 +76,7 @@ function getConfig(): Config {
     commonLockJsrPath: parsedArgs.commonLockJsrPath.value,
     commonLockNpmPath: parsedArgs.commonLockNpmPath.value,
     commonLockHttpsPath: parsedArgs.commonLockHttpsPath.value,
+    commonLockRedirectsPath: parsedArgs.commonLockRedirectsPath.value,
     denoLockPath: parsedArgs.denoLockPath.value,
   };
 }
@@ -220,10 +232,21 @@ function makeHttpsCommonLock(denolock: DenoLock): CommonLockFormatIn {
   return Object.values(result);
 }
 
+function makeRedirects(denolock: DenoLock): Array<RedirectOut> {
+  if (!denolock.redirects) {
+    return [];
+  }
+  return Object.entries(denolock.redirects).map(([url, location]) => ({
+    url,
+    location,
+  }));
+}
+
 type TransformedLocks = {
   jsr: CommonLockFormatIn;
   npm: CommonLockFormatIn;
   https: CommonLockFormatIn;
+  redirects: Array<RedirectOut>;
 };
 
 /**
@@ -235,6 +258,7 @@ function transformAll(lockfile: DenoLock): TransformedLocks {
     jsr: makeJsrCommonLock(lockfile),
     npm: makeNpmCommonLock(lockfile),
     https: makeHttpsCommonLock(lockfile),
+    redirects: makeRedirects(lockfile),
   };
 }
 
@@ -242,6 +266,7 @@ async function writeAll(
   outPathJsr: PathString,
   outPathNpm: PathString,
   outPathHttps: PathString,
+  outPathRedirects: PathString,
   transformedLocks: TransformedLocks,
 ) {
   const promises = [
@@ -256,6 +281,10 @@ async function writeAll(
     Deno.writeTextFile(
       outPathHttps,
       JSON.stringify(transformedLocks.https, null, 2),
+    ),
+    Deno.writeTextFile(
+      outPathRedirects,
+      JSON.stringify(transformedLocks.redirects, null, 2),
     ),
   ];
   await Promise.all(promises);
@@ -283,6 +312,7 @@ async function main() {
     config.commonLockJsrPath,
     config.commonLockNpmPath,
     config.commonLockHttpsPath,
+    config.commonLockRedirectsPath,
     transformedLocks,
   );
 }

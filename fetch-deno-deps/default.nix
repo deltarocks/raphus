@@ -41,7 +41,8 @@ let
             --deno-lock-path ./deno.lock \
             --common-lock-jsr-path $out/jsr.json \
             --common-lock-npm-path $out/npm.json \
-            --common-lock-https-path $out/https.json;
+            --common-lock-https-path $out/https.json \
+            --common-lock-redirects-path $out/redirects.json;
 
           runHook postBuild
         '';
@@ -101,6 +102,7 @@ let
             --common-lock-jsr-path ./jsr.json \
             --common-lock-npm-path ./npm.json \
             --common-lock-https-path ./https.json \
+            --common-lock-redirects-path ./redirects.json \
             --out-path-prefix $out;
           cp ${denoLock} $out/deno.lock
 
@@ -165,7 +167,8 @@ let
             --deno-dir-path $DENO_DIR \
             --vendor-dir-path $vendorDir \
             --common-lock-jsr-path "./jsr.json" \
-            --common-lock-https-path "./https.json";
+            --common-lock-https-path "./https.json" \
+            --common-lock-redirects-path "./redirects.json";
 
           runHook postBuild;
         '';

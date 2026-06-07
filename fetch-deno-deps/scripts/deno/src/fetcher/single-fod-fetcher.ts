@@ -21,6 +21,7 @@ type SingleFodFetcherConfig = {
   commonLockJsrPath: PathString;
   commonLockNpmPath: PathString;
   commonLockHttpsPath: PathString;
+  commonLockRedirectsPath: PathString;
   jsrRegistryUrl: string;
   commonLockJsr: CommonLockFormatIn;
   commonLockNpm: CommonLockFormatIn;
@@ -33,9 +34,10 @@ function getConfig(): Config {
     commonLockJsrPath: null;
     commonLockNpmPath: null;
     commonLockHttpsPath: null;
+    commonLockRedirectsPath: null;
     jsrRegistryUrl: null;
     outPathPrefix: null;
-  };
+  }
 
   const unparsedArgs: UnparsedArgs<ArgNames> = {
     commonLockJsrPath: {
@@ -48,6 +50,10 @@ function getConfig(): Config {
     },
     commonLockHttpsPath: {
       flag: "--common-lock-https-path",
+      defaultValue: "",
+    },
+    commonLockRedirectsPath: {
+      flag: "--common-lock-redirects-path",
       defaultValue: "",
     },
     jsrRegistryUrl: {
@@ -75,6 +81,7 @@ function getConfig(): Config {
     commonLockJsrPath: parsedArgs.commonLockJsrPath.value,
     commonLockNpmPath: parsedArgs.commonLockNpmPath.value,
     commonLockHttpsPath: parsedArgs.commonLockHttpsPath.value,
+    commonLockRedirectsPath: parsedArgs.commonLockRedirectsPath.value,
     jsrRegistryUrl: parsedArgs.jsrRegistryUrl.value,
     outPathPrefix: parsedArgs.outPathPrefix.value,
   };
@@ -119,6 +126,14 @@ async function fetchAndWrite(config: Config) {
     Deno.writeTextFile(
       addPrefix(getFileName(config.commonLockNpmPath), config.outPathPrefix),
       JSON.stringify(lockfiles.npm, null, 2),
+      { create: true },
+    ),
+    Deno.writeTextFile(
+      addPrefix(
+        getFileName(config.commonLockRedirectsPath),
+        config.outPathPrefix,
+      ),
+      Deno.readTextFileSync(config.commonLockRedirectsPath),
       { create: true },
     ),
   ];
