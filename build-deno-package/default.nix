@@ -33,7 +33,7 @@ in
   # The package used for every deno command in the build
   denoPackage ? deno,
   # The package used as the runtime that is bundled with the the src to create the binary.
-  denortPackage ? (import ../denort/default.nix { deno = denoPackage; inherit lib; }),
+  denortPackage ? (import ../denort/default.nix { deno = denoPackage; }),
   # The script to run to build the project.
   # You still need to specify in the installPhase, what artifacts to copy to `$out`.
   denoTaskScript ? "build",
