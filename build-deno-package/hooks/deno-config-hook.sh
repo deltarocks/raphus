@@ -73,7 +73,8 @@ denoConfigHook() {
       --deno-dir-path "$deno_dir" \
       --vendor-dir-path "$vendor_dir" \
       --common-lock-jsr-path "$denoDeps/jsr.json" \
-      --common-lock-https-path "$denoDeps/https.json"
+      --common-lock-https-path "$denoDeps/https.json" \
+      --common-lock-redirects-path "$denoDeps/redirects.json"
   }
   installDeps
 
