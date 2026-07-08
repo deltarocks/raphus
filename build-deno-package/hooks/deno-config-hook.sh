@@ -59,6 +59,17 @@ denoConfigHook() {
   echo "Adding vendor to deno.json"
   useVendor
 
+  # NOTE: deno's minimum dependency age gating needs full packuments with `time`
+  # fields, which the cache built from deno.lock does not contain; the build is
+  # frozen to the lockfile anyway, so age gating serves no purpose here
+  disableMinimumDependencyAge() {
+    jq '.minimumDependencyAge = false' deno.json >temp.json &&
+      rm -f deno.json &&
+      mv temp.json deno.json
+  }
+  echo "Disabling minimumDependencyAge in deno.json"
+  disableMinimumDependencyAge
+
   if [ -n "${denoLinksJson-}" ]; then
     echo "Rewriting links"
     jq --argjson links "$denoLinksJson" '.links = $links' deno.json >temp.json &&
