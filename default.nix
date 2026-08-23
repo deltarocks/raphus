@@ -45,6 +45,7 @@ in
   };
   packages = {
     inherit denort;
+    wasmbuildHook = pkgs.callPackage ./build-deno-package/hooks/wasmbuild.nix { };
   };
   checks = {
     inherit tests;

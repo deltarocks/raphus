@@ -9,6 +9,7 @@
   denoHooks,
   lib,
   callPackage,
+  rustPlatform,
 }:
 let
   vendorJsonName = "vendor.json";
@@ -71,9 +72,18 @@ in
   denoTaskSuffix ? "",
   # If the project links external workspaces - they need to be provided explicitly
   denoLinks ? [ ],
+  # Crates built by @deno/wasmbuild during the build, as a list of
+  # { lockFile, cargoRoot }. Vendors cargo dependencies for offline builds and
+  # seeds wasm-opt so wasmbuild does not try to download binaryen.
+  wasmbuildCrates ? [ ],
+  # Rust toolchain with the wasm32-unknown-unknown target, required when
+  # wasmbuildCrates is non-empty. Plain nixpkgs rustc lacks the wasm32 std.
+  rustToolchain ? null,
   ...
 }@args:
 let
+
+  denoWasmbuildHook = callPackage ./hooks/wasmbuild.nix { };
 
   inherit (callPackage ../fetch-deno-deps/scripts/deno/default.nix { }) fetch-deno-deps-scripts;
   inherit (callPackage ../fetch-deno-deps/scripts/rust/file-structure-transformer-vendor/default.nix { })
@@ -90,7 +100,25 @@ let
   args' = builtins.removeAttrs args [
     "denoDepsInjectedEnvVars"
     "denoLinks"
+    "wasmbuildCrates"
+    "rustToolchain"
   ];
+
+  wasmbuildCargoConfigs = lib.concatMapStrings (
+    crate:
+    let
+      vendor = rustPlatform.importCargoLock { inherit (crate) lockFile; };
+    in
+    ''
+      mkdir -p ${lib.escapeShellArg crate.cargoRoot}/.cargo
+      cat >> ${lib.escapeShellArg crate.cargoRoot}/.cargo/config.toml <<'CARGO_VENDOR_EOF'
+      [source.crates-io]
+      replace-with = "vendored-sources"
+      [source.vendored-sources]
+      directory = "${vendor}"
+      CARGO_VENDOR_EOF
+    ''
+  ) wasmbuildCrates;
 
   denoHooks' = denoHooks {
     inherit
@@ -138,18 +166,22 @@ stdenvNoCC.mkDerivation (
 
     denoDeps = denoDeps.fetched;
 
-    nativeBuildInputs = nativeBuildInputs ++ [
-      # Prefer passed hooks
-      (if denoConfigHook != null then denoConfigHook else denoHooks'.denoConfigHook)
-      (if denoBuildHook != null then denoBuildHook else denoHooks'.denoBuildHook)
-      (if denoInstallHook != null then denoInstallHook else denoHooks'.denoInstallHook)
-      denoPackage
-      diffutils
-      zip
-      jq
-      fetch-deno-deps-scripts
-      file-structure-transformer-vendor
-    ];
+    nativeBuildInputs =
+      nativeBuildInputs
+      ++ [
+        # Prefer passed hooks
+        (if denoConfigHook != null then denoConfigHook else denoHooks'.denoConfigHook)
+        (if denoBuildHook != null then denoBuildHook else denoHooks'.denoBuildHook)
+        (if denoInstallHook != null then denoInstallHook else denoHooks'.denoInstallHook)
+        denoPackage
+        diffutils
+        zip
+        jq
+        fetch-deno-deps-scripts
+        file-structure-transformer-vendor
+      ]
+      ++ lib.optional (wasmbuildCrates != [ ]) denoWasmbuildHook
+      ++ lib.optional (rustToolchain != null) rustToolchain;
 
     DENO_DIR = denoDir;
 
@@ -165,5 +197,8 @@ stdenvNoCC.mkDerivation (
   }
   // lib.optionalAttrs (denoLinks != [ ]) {
     denoLinksJson = builtins.toJSON denoLinks;
+  }
+  // lib.optionalAttrs (wasmbuildCrates != [ ]) {
+    postConfigure = (args.postConfigure or "") + wasmbuildCargoConfigs;
   }
 )
