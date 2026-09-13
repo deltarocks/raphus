@@ -103,6 +103,7 @@ async function getFilesAndHashesUsingModuleGraph(
   const importers = Object.keys(moduleGraph);
   const exported = Object.values(exports).map((v) => v.replace(/^\.\//, "/"));
   const imported: Array<string> = [];
+  const importedDynamically = new Set<string>();
   Object.entries(moduleGraph).forEach(([importedFilePath, value]) => {
     const basePath = getBasePath(importedFilePath);
     value?.dependencies?.forEach((dependency) => {
@@ -146,18 +147,32 @@ async function getFilesAndHashesUsingModuleGraph(
       if (!isPath(specifier)) {
         return;
       }
-      imported.push(normalizeUnixPath(`${basePath}/${specifier}`));
+      const filePath = normalizeUnixPath(`${basePath}/${specifier}`);
+      imported.push(filePath);
+      if (dependency.type === "dynamic") {
+        importedDynamically.add(filePath);
+      }
     });
   });
   const all = importers.concat(exported).concat(imported);
 
   const set = new Set(all);
   const result: Record<string, string> = {};
-  Array.from(set).forEach(
-    (
-      fileName,
-    ) => (result[fileName] = parsedVersionMetaJson.manifest[fileName].checksum),
-  );
+  Array.from(set).forEach((fileName) => {
+    const entry = parsedVersionMetaJson.manifest[fileName];
+    if (!entry) {
+      // bundled cjs code (e.g. typescript inside @ts-morph/common) shows up in
+      // the module graph as dynamic `require("./fs")` entries, which are node
+      // builtins rather than package files
+      if (importedDynamically.has(fileName)) {
+        return;
+      }
+      throw `file ${fileName} from the module graph is missing in the manifest of ${
+        JSON.stringify(versionMetaJson)
+      }`;
+    }
+    result[fileName] = entry.checksum;
+  });
   return result;
 }
 
