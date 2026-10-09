@@ -1,0 +1,21 @@
+{
+	"name": "pnpm-prepare",
+	"version": "0.1.0",
+	"type": "module",
+	"bin": {
+		"pnpm-prepare": "./mod.ts"
+	},
+	"scripts": {
+		"prepack": "deno run --allow-read --allow-write=dist --allow-env --allow-run=deno mod.ts"
+	},
+	"publishConfig": {
+		"directory": "dist",
+		"linkDirectory": false
+	},
+	"dependencies": {
+		"typescript": "~6.0.3"
+	},
+	"devDependencies": {
+		"@types/node": "^26.6.4"
+	}
+}
