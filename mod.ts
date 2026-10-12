@@ -1,5 +1,14 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write=dist,package.json --allow-env --allow-run=deno
+#!/usr/bin/env -S deno run --allow-read --allow-write=dist --allow-env --allow-run=deno
 import ts from "typescript";
+import {
+	type PluginItem,
+	type PluginObject,
+	transformFileAsync,
+	types as t,
+} from "@babel/core";
+import decorators from "@babel/plugin-proposal-decorators";
+import reactJsx from "@babel/plugin-transform-react-jsx";
+import typescript from "@babel/preset-typescript";
 import { execFileSync } from "node:child_process";
 import {
 	copyFile,
@@ -10,33 +19,13 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
-import { dirname, join, normalize, relative } from "node:path";
+import { basename, dirname, join, normalize, relative } from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
 const out = join(root, "dist");
 const manifestText = await readFile(join(root, "package.json"), "utf8");
 const pkg = JSON.parse(manifestText);
-
-if (process.argv[2] === "init") {
-	if (pkg.private) {
-		console.log(`${pkg.name ?? root}: private, skipped`);
-		process.exit(0);
-	}
-	pkg.scripts = { ...pkg.scripts, prepack: "pnpm-prepare" };
-	pkg.publishConfig = {
-		...pkg.publishConfig,
-		directory: "dist",
-		linkDirectory: false,
-	};
-	const indent = /\n([ \t]+)"/.exec(manifestText)?.[1] ?? "\t";
-	await writeFile(
-		join(root, "package.json"),
-		JSON.stringify(pkg, null, indent) + "\n",
-	);
-	console.log(`${pkg.name}: publishConfig written`);
-	process.exit(0);
-}
 
 const exists = (path: string) => stat(path).then((s) => s, () => undefined);
 const isSource = (file: string) =>
@@ -46,8 +35,9 @@ const emitted = (file: string) =>
 	file.replace(/\.(c|m)?tsx?$/, (_, m = "") => `.${m}js`);
 const declared = (file: string) =>
 	file.replace(/\.(c|m)?tsx?$/, (_, m = "") => `.d.${m}ts`);
-const toJs = (text: string, pattern: RegExp) =>
-	text.replace(pattern, (_, spec, m = "", end) => `${spec}.${m}js${end}`);
+const isRelative = (spec: string) => /^\.{1,2}\//.test(spec);
+const toJs = (spec: string) =>
+	isRelative(spec) && isSource(spec) ? emitted(spec) : spec;
 
 async function configOptions(): Promise<ts.CompilerOptions> {
 	for (let dir = root;; dir = dirname(dir)) {
@@ -78,29 +68,110 @@ const jsOptions: ts.CompilerOptions = {
 	...(await configOptions()),
 };
 
-const URL_REFS =
-	/(new URL\(\s*["']\.{1,2}\/[^"']+?|import\.meta\.resolve\(\s*["']\.{1,2}\/[^"']+?)\.(c|m)?tsx?(["'])/g;
-const IMPORT_REFS =
-	/((?:from|import)\s*\(?\s*["']\.{1,2}\/[^"']+?)\.(c|m)?tsx?(["'])/g;
 const STYLE_REFS = [
 	/@import\s+(?:url\(\s*)?["']?(\.{1,2}\/[^"')\s]+)/g,
 	/url\(\s*["']?(\.{1,2}\/[^"')\s]+)["']?\s*\)/g,
 ];
 
-function refs(file: string, text: string): string[] {
-	const info = ts.preProcessFile(text, true, true);
-	const found = file.endsWith(".css")
-		? STYLE_REFS.flatMap((re) => [...text.matchAll(re)].map((m) => m[1]))
-		: [
-			...info.importedFiles,
-			...info.referencedFiles,
-			...info.typeReferenceDirectives,
-		].map((f) => f.fileName).concat(
-			[...text.matchAll(
-				/(?:new URL\(|import\.meta\.resolve\()\s*["'](\.{1,2}\/[^"']+)["']/g,
-			)].map((m) => m[1]),
+const isImportMeta = (node: ts.Node, name: string) =>
+	ts.isPropertyAccessExpression(node) && ts.isMetaProperty(node.expression) &&
+	node.expression.keywordToken === ts.SyntaxKind.ImportKeyword &&
+	node.name.text === name;
+
+function specifier(node: ts.Node): ts.Node | undefined {
+	if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+		return node.moduleSpecifier;
+	}
+	if (ts.isExternalModuleReference(node)) return node.expression;
+	if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+		return node.argument.literal;
+	}
+	if (ts.isCallExpression(node)) {
+		const callee = node.expression;
+		if (
+			callee.kind === ts.SyntaxKind.ImportKeyword ||
+			isImportMeta(callee, "resolve") ||
+			(ts.isIdentifier(callee) && callee.text === "require")
+		) return node.arguments[0];
+	}
+	if (
+		ts.isNewExpression(node) && ts.isIdentifier(node.expression) &&
+		node.expression.text === "URL" && node.arguments?.length === 2 &&
+		isImportMeta(node.arguments[1], "url")
+	) return node.arguments[0];
+}
+
+function specifiers(file: ts.SourceFile): ts.StringLiteralLike[] {
+	const found: ts.StringLiteralLike[] = [];
+	const visit = (node: ts.Node) => {
+		const spec = specifier(node);
+		if (spec && ts.isStringLiteralLike(spec)) found.push(spec);
+		ts.forEachChild(node, visit);
+	};
+	visit(file);
+	return found;
+}
+
+function rewrite<T extends ts.SourceFile | ts.Bundle>(
+	context: ts.TransformationContext,
+) {
+	return (node: T): T => {
+		if (!ts.isSourceFile(node)) return node;
+		const targets = new Set<ts.Node>(
+			specifiers(node).filter((spec) => toJs(spec.text) !== spec.text),
 		);
-	return found.filter((spec) => /^\.{1,2}\//.test(spec));
+		if (!targets.size) return node;
+		const visit = (child: ts.Node): ts.Node =>
+			targets.has(child)
+				? ts.factory.createStringLiteral(
+					toJs((child as ts.StringLiteralLike).text),
+				)
+				: ts.visitEachChild(child, visit, context);
+		return ts.visitEachChild(node, visit, context) as T;
+	};
+}
+
+const isMeta = (node: t.Node, name: string) =>
+	t.isMemberExpression(node) && t.isMetaProperty(node.object) &&
+	node.object.meta.name === "import" && t.isIdentifier(node.property, { name });
+
+const rewriteLiteral = (node: t.Node | null | undefined) => {
+	if (t.isStringLiteral(node)) node.value = toJs(node.value);
+};
+
+const rewriteImports = (): PluginObject => ({
+	visitor: {
+		ImportOrExportDeclaration({ node }) {
+			if ("source" in node) rewriteLiteral(node.source);
+		},
+		ImportExpression(path) {
+			rewriteLiteral(path.node.source);
+		},
+		CallExpression({ node }) {
+			if (
+				isMeta(node.callee, "resolve") ||
+				t.isIdentifier(node.callee, { name: "require" })
+			) rewriteLiteral(node.arguments[0]);
+		},
+		NewExpression({ node }) {
+			if (
+				t.isIdentifier(node.callee, { name: "URL" }) &&
+				node.arguments.length === 2 && isMeta(node.arguments[1], "url")
+			) rewriteLiteral(node.arguments[0]);
+		},
+	},
+});
+
+function refs(file: string, text: string): string[] {
+	if (file.endsWith(".css")) {
+		return STYLE_REFS.flatMap((re) => [...text.matchAll(re)].map((m) => m[1]));
+	}
+	const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest);
+	return [
+		...specifiers(source).map((spec) => spec.text),
+		...[...source.referencedFiles, ...source.typeReferenceDirectives]
+			.map((ref) => ref.fileName),
+	].filter(isRelative);
 }
 
 function strings(value: unknown): string[] {
@@ -151,6 +222,44 @@ while (queue.length) {
 	}
 }
 
+const jsxPlugins: PluginItem[] = jsOptions.jsx === ts.JsxEmit.Preserve ? [] : [[
+	reactJsx,
+	jsOptions.jsx === ts.JsxEmit.React
+		? {
+			runtime: "classic",
+			pragma: jsOptions.jsxFactory,
+			pragmaFrag: jsOptions.jsxFragmentFactory,
+		}
+		: { runtime: "automatic", importSource: jsOptions.jsxImportSource },
+]];
+
+async function transpile(file: string) {
+	const result = await transformFileAsync(join(root, file), {
+		configFile: false,
+		babelrc: false,
+		browserslistConfigFile: false,
+		sourceType: "module",
+		sourceMaps: true,
+		sourceFileName: basename(file),
+		parserOpts: { plugins: ["deferredImportEvaluation"] },
+		presets: [typescript],
+		plugins: [
+			[decorators, { version: "2023-11" }],
+			...(/\.[cm]?[jt]sx$/.test(file) ? jsxPlugins : []),
+			rewriteImports,
+		],
+	});
+	if (result?.code == null || !result.map) {
+		throw new Error(`${file}: babel returned no output`);
+	}
+	return {
+		code: `${result.code}\n//# sourceMappingURL=${
+			basename(emitted(file))
+		}.map\n`,
+		map: JSON.stringify(result.map),
+	};
+}
+
 await rm(out, { recursive: true, force: true });
 const sources = [...reachable].filter(isSource);
 console.log("Reachable:", reachable);
@@ -161,11 +270,9 @@ for (const file of reachable) {
 		await copyFile(join(root, file), target);
 		continue;
 	}
-	const js = ts.transpileModule(await readFile(join(root, file), "utf8"), {
-		compilerOptions: jsOptions,
-		fileName: file,
-	});
-	await writeFile(emitted(target), toJs(js.outputText, URL_REFS));
+	const { code, map } = await transpile(file);
+	await writeFile(emitted(target), code);
+	await writeFile(`${emitted(target)}.map`, map);
 }
 
 function denoTypes(): string | undefined {
@@ -205,10 +312,11 @@ const result = ts.createProgram({ rootNames, options: dtsOptions, host }).emit(
 	(file, text) => {
 		if (!expected.has(file)) return;
 		const target = join(out, relative(root, file));
-		ts.sys.writeFile(target, toJs(text, IMPORT_REFS));
+		ts.sys.writeFile(target, text);
 	},
 	undefined,
 	true,
+	{ afterDeclarations: [rewrite] },
 );
 if (result.diagnostics.length) {
 	errors.push(
@@ -244,7 +352,9 @@ else if (pkg.bin) {
 delete manifest.scripts;
 delete manifest.devDependencies;
 manifest.files = [...reachable].flatMap((file) =>
-	isSource(file) ? [emitted(file), declared(file)] : [file]
+	isSource(file)
+		? [emitted(file), `${emitted(file)}.map`, declared(file)]
+		: [file]
 ).sort();
 manifest.publishConfig = { ...pkg.publishConfig };
 delete manifest.publishConfig.directory;

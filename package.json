@@ -13,6 +13,10 @@
 		"linkDirectory": false
 	},
 	"dependencies": {
+		"@babel/core": "^8.0.7",
+		"@babel/plugin-proposal-decorators": "^8.0.2",
+		"@babel/plugin-transform-react-jsx": "^8.0.1",
+		"@babel/preset-typescript": "^8.0.7",
 		"typescript": "~6.0.3"
 	},
 	"devDependencies": {
