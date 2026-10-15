@@ -10,6 +10,9 @@ deno.overrideAttrs (
     cargoBuildFeatures = [ ];
 
     postInstall = "";
+    postFixup = builtins.replaceStrings [ "$out/bin/deno" ] [ "$out/bin/denort" ] (
+      prev.postFixup or ""
+    );
     doCheck = false;
     doInstallCheck = false;
 
