@@ -17,6 +17,8 @@
 		"@babel/plugin-proposal-decorators": "^8.0.2",
 		"@babel/plugin-transform-react-jsx": "^8.0.1",
 		"@babel/preset-typescript": "^8.0.7",
+		"@std/fs": "jsr:^1.0.0",
+		"@std/yaml": "jsr:^1.0.0",
 		"typescript": "~6.0.3"
 	},
 	"devDependencies": {

@@ -9,7 +9,6 @@ import {
 import decorators from "@babel/plugin-proposal-decorators";
 import reactJsx from "@babel/plugin-transform-react-jsx";
 import typescript from "@babel/preset-typescript";
-import { execFileSync } from "node:child_process";
 import {
 	copyFile,
 	mkdir,
@@ -21,6 +20,8 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, normalize, relative } from "node:path";
 import process from "node:process";
+import { parse as parseYaml } from "@std/yaml";
+import { expandGlob } from "@std/fs/expand-glob";
 
 const root = process.cwd();
 const out = join(root, "dist");
@@ -275,12 +276,14 @@ for (const file of reachable) {
 	await writeFile(`${emitted(target)}.map`, map);
 }
 
-function denoTypes(): string | undefined {
-	try {
-		return execFileSync("deno", ["types"], { encoding: "utf8" });
-	} catch {
-		return undefined;
-	}
+function denoTypes(): string {
+	const { success, stdout, stderr } = new Deno.Command("deno", {
+		args: ["types"],
+		env: { LD_LIBRARY_PATH: "", LD_FOR_BUILD: "" },
+	}).outputSync();
+	const decoder = new TextDecoder();
+	if (!success) throw new Error(`deno types: ${decoder.decode(stderr)}`);
+	return decoder.decode(stdout);
 }
 
 const dtsOptions: ts.CompilerOptions = {
@@ -296,16 +299,13 @@ const dtsOptions: ts.CompilerOptions = {
 const host = ts.createCompilerHost(dtsOptions);
 const denoLib = join(root, "__deno_types__.d.ts");
 const denoText = denoTypes();
-const rootNames = sources.map((file) => join(root, file));
-if (denoText !== undefined) {
-	rootNames.push(denoLib);
-	const { getSourceFile, fileExists } = host;
-	host.fileExists = (file) => file === denoLib || fileExists(file);
-	host.getSourceFile = (file, version, ...rest) =>
-		file === denoLib
-			? ts.createSourceFile(file, denoText, version)
-			: getSourceFile(file, version, ...rest);
-}
+const rootNames = [...sources.map((file) => join(root, file)), denoLib];
+const { getSourceFile, fileExists } = host;
+host.fileExists = (file) => file === denoLib || fileExists(file);
+host.getSourceFile = (file, version, ...rest) =>
+	file === denoLib
+		? ts.createSourceFile(file, denoText, version)
+		: getSourceFile(file, version, ...rest);
 const expected = new Set(sources.map((file) => join(root, declared(file))));
 const result = ts.createProgram({ rootNames, options: dtsOptions, host }).emit(
 	undefined,
@@ -342,7 +342,114 @@ function publish(value: unknown): unknown {
 	return value;
 }
 
+type WorkspaceConfig = {
+	packages?: string[];
+	catalog?: Record<string, string>;
+	catalogs?: Record<string, Record<string, string>>;
+};
+
+async function workspaceRoot(): Promise<string | undefined> {
+	for (let dir = root;; dir = dirname(dir)) {
+		if ((await exists(join(dir, "pnpm-workspace.yaml")))?.isFile()) return dir;
+		if (dirname(dir) === dir) return undefined;
+	}
+}
+
+const workspaceDir = await workspaceRoot();
+const workspace: WorkspaceConfig = workspaceDir === undefined ? {} : (parseYaml(
+	await readFile(join(workspaceDir, "pnpm-workspace.yaml"), "utf8"),
+) as WorkspaceConfig | null) ?? {};
+const catalogs: Record<string, Record<string, string>> = {
+	...workspace.catalogs,
+	default: { ...workspace.catalogs?.default, ...workspace.catalog },
+};
+
+const readVersion = async (dir: string): Promise<string | undefined> =>
+	JSON.parse(await readFile(join(dir, "package.json"), "utf8")).version;
+
+let workspaceVersions: Promise<Map<string, string>> | undefined;
+function workspacePackages(): Promise<Map<string, string>> {
+	workspaceVersions ??= (async () => {
+		const versions = new Map<string, string>();
+		if (workspaceDir === undefined) return versions;
+		const patterns = workspace.packages ?? [];
+		const exclude = [
+			"**/node_modules/**",
+			...patterns.filter((p) => p.startsWith("!")).map((p) => p.slice(1)),
+		];
+		const manifests = [join(workspaceDir, "package.json")];
+		for (const pattern of patterns.filter((p) => !p.startsWith("!"))) {
+			for await (
+				const entry of expandGlob(join(pattern, "package.json"), {
+					root: workspaceDir,
+					exclude,
+				})
+			) manifests.push(entry.path);
+		}
+		for (const file of manifests) {
+			if (!(await exists(file))?.isFile()) continue;
+			const { name, version } = JSON.parse(await readFile(file, "utf8"));
+			if (name && version) versions.set(name, version);
+		}
+		return versions;
+	})();
+	return workspaceVersions;
+}
+
+async function resolveSpec(
+	field: string,
+	dep: string,
+	spec: string,
+): Promise<string> {
+	if (spec.startsWith("catalog:")) {
+		const name = spec.slice("catalog:".length) || "default";
+		const resolved = catalogs[name]?.[dep];
+		if (resolved === undefined) {
+			errors.push(`${field}.${dep}: not in catalog "${name}"`);
+			return spec;
+		}
+		return resolved;
+	}
+	if (!spec.startsWith("workspace:")) return spec;
+	let range = spec.slice("workspace:".length);
+	let target = dep;
+	let version: string | undefined;
+	if (range.startsWith(".") || range.startsWith("/")) {
+		version = await readVersion(join(root, range)).catch(() => undefined);
+		range = "*";
+	} else {
+		const at = range.lastIndexOf("@");
+		if (at > 0) {
+			target = range.slice(0, at);
+			range = range.slice(at + 1);
+		}
+		version = (await workspacePackages()).get(target);
+	}
+	if (version === undefined) {
+		errors.push(`${field}.${dep}: ${target} is not a workspace package`);
+		return spec;
+	}
+	const resolved = range === "*"
+		? version
+		: range === "^" || range === "~"
+		? range + version
+		: range;
+	return target === dep ? resolved : `npm:${target}@${resolved}`;
+}
+
 const manifest = { ...pkg, exports: publish(pkg.exports) };
+for (
+	const field of ["dependencies", "peerDependencies", "optionalDependencies"]
+) {
+	if (!pkg[field]) continue;
+	manifest[field] = Object.fromEntries(
+		await Promise.all(
+			Object.entries(pkg[field] as Record<string, string>).map(
+				async ([dep, spec]) => [dep, await resolveSpec(field, dep, spec)],
+			),
+		),
+	);
+}
 if (typeof pkg.bin === "string") manifest.bin = emitted(pkg.bin);
 else if (pkg.bin) {
 	manifest.bin = Object.fromEntries(
