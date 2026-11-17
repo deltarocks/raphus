@@ -19,6 +19,11 @@ denoBuildHook() {
     concatTo flagsArray denoCompileFlags denoFlags
     concatTo extraArray extraCompileFlags
 
+    if [ -n "${NODE_ENV-}" ]; then
+      printf 'NODE_ENV=%s\n' "$NODE_ENV" >"$NIX_BUILD_TOP/deno-compile.env"
+      flagsArray+=("--env-file=$NIX_BUILD_TOP/deno-compile.env")
+    fi
+
     mkdir -p "$NIX_BUILD_TOP/deno-compile"
     deno compile \
       --output "$NIX_BUILD_TOP/deno-compile/${pname:-$name}" \

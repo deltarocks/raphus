@@ -19,6 +19,7 @@ lib.extendMkDerivation {
     "denoPackage"
     "denortPackage"
     "pnpmPackage"
+    "NODE_ENV"
     "denoBuildHook"
     "denoInstallHook"
     "denoTaskPrefix"
@@ -40,6 +41,7 @@ lib.extendMkDerivation {
       denoPackage ? deno,
       denortPackage ? denort,
       pnpmPackage ? pnpm,
+      NODE_ENV ? "production",
       # The script to run to build the project.
       # You still need to specify in the installPhase, what artifacts to copy to `$out`.
       denoTaskScript ? "build",
@@ -134,6 +136,9 @@ lib.extendMkDerivation {
       meta = (args.meta or { }) // {
         platforms = args.meta.platforms or denoPackage.meta.platforms;
       };
+    }
+    // lib.optionalAttrs (NODE_ENV != null) {
+      inherit NODE_ENV;
     }
     // lib.optionalAttrs (denortPackage != null) {
       DENORT_BIN = lib.getExe' denortPackage "denort";
