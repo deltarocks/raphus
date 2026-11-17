@@ -7,14 +7,7 @@
 pkgs.lib.makeScope pkgs.newScope (self: {
   inherit importPnpmLock iplConfigHook;
 
-  deno = self.callPackage ./dodo {
-    dodo = dodo.deno;
-    mainProgram = "deno";
-  };
-  denort = self.callPackage ./dodo {
-    dodo = dodo.denort;
-    mainProgram = "denort";
-  };
+  inherit (dodo) deno denort;
   pnpm = self.callPackage ./pnpm { };
 
   denoHooks = self.callPackage ./build-deno-package/hooks { };

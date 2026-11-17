@@ -6,7 +6,7 @@ on [dodo](https://github.com/deltarocks/dodo).
 - `buildDenoPackage`: installs `node_modules` from `pnpm-lock.yaml` via
   [importPnpmLock](https://github.com/Scrumplex/importPnpmLock.nix) (no
   dependency hash), then runs `deno task` or `deno compile`
-- `deno`, `denort`: dodo builds with vulkan in rpath for WebGPU
+- `deno`, `denort`: dodo packages
 - `pnpm`: pinned pnpm binary
 - `wasmbuildHook`: seeds `wasm-opt` for `@deno/wasmbuild`
 - `pnpm-prepare`: transpiles a package to JS + `.d.ts` before `pnpm publish`
