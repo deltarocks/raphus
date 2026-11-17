@@ -14,10 +14,11 @@ denoWasmbuildHook() {
   echo "Executing denoWasmbuildHook"
 
   local wasmoptFiles tags
-  wasmoptFiles=$(find "$vendorDir" -path '*wasmbuild*' -name 'wasmopt.ts' 2>/dev/null)
+  local -r searchDir="${vendorDir:-node_modules}"
+  wasmoptFiles=$(find "$searchDir" -path '*wasmbuild*' -name 'wasmopt.ts' 2>/dev/null)
 
   if [ -z "$wasmoptFiles" ]; then
-    echo "wasmbuild not found in $vendorDir, skipping wasm-opt seeding"
+    echo "wasmbuild not found in $searchDir, skipping wasm-opt seeding"
     return
   fi
 

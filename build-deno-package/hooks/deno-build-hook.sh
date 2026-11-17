@@ -6,32 +6,36 @@ denoBuildHook() {
   runHook preBuild
 
   # have to make sure that DENO_DIR is an absolute path, so we don't run into issues when using workspaces with subdirectories
-  export DENO_DIR="$(realpath $DENO_DIR)"
+  if [ -n "${DENO_DIR-}" ]; then
+    export DENO_DIR="$(realpath "$DENO_DIR")"
+  fi
+
+  local -a flagsArray=()
+  local -a extraArray=()
 
   if [ -n "${binaryEntrypointPath-}" ]; then
     echo "Creating binary"
 
-    package_name=$(jq -r '.name' deno.json)
-    if [ "$package_name" == "null" ]; then
-      package_name="${pname:-$name}"
-    fi
+    concatTo flagsArray denoCompileFlags denoFlags
+    concatTo extraArray extraCompileFlags
 
+    mkdir -p "$NIX_BUILD_TOP/deno-compile"
     deno compile \
-      --output "$package_name" \
-      --target "$hostPlatform_" \
-      $denoCompileFlags \
-      $denoFlags \
-      "${denoWorkspacePath+$denoWorkspacePath/}$binaryEntrypointPath"
-      $extraCompileFlags \
+      --output "$NIX_BUILD_TOP/deno-compile/${pname:-$name}" \
+      "${flagsArray[@]}" \
+      "${denoWorkspacePath:+$denoWorkspacePath/}$binaryEntrypointPath" \
+      "${extraArray[@]}"
 
   elif [ -n "${denoTaskScript-}" ]; then
+    concatTo flagsArray denoTaskFlags denoFlags
+    concatTo extraArray extraTaskFlags
+
     if ! @denoTaskPrefix@ \
       deno task \
-      ${denoWorkspacePath+--cwd=$denoWorkspacePath} \
-      $denoTaskFlags \
-      $denoFlags \
+      ${denoWorkspacePath:+--cwd=$denoWorkspacePath} \
+      "${flagsArray[@]}" \
       "$denoTaskScript" \
-      $extraTaskFlags \
+      "${extraArray[@]}" \
       @denoTaskSuffix@; then
       echo
       echo 'ERROR: `deno task` failed'

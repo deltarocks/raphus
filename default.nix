@@ -1,53 +1,23 @@
-let
-  sources = import ./lon.nix;
-  nixpkgs = import sources.nixpkgs { };
-in
 {
-  pkgs ? nixpkgs,
+  pkgs,
+  importPnpmLock,
+  iplConfigHook,
+  dodo,
 }:
-let
-  fetchDenoDeps = pkgs.callPackage ./fetch-deno-deps/default.nix { };
-  buildDenoPackage = pkgs.callPackage ./build-deno-package/default.nix {
-    inherit denoHooks fetchDenoDeps;
-  };
-  denoHooks = pkgs.callPackage ./build-deno-package/hooks/default.nix { };
+pkgs.lib.makeScope pkgs.newScope (self: {
+  inherit importPnpmLock iplConfigHook;
 
-  fetch-deno-deps-scripts = {
-    deno = (pkgs.callPackage ./fetch-deno-deps/scripts/deno/default.nix { }).fetch-deno-deps-scripts;
-    rust =
-      (pkgs.callPackage ./fetch-deno-deps/scripts/rust/file-structure-transformer-vendor/default.nix { })
-      .file-structure-transformer-vendor;
+  deno = self.callPackage ./dodo {
+    dodo = dodo.deno;
+    mainProgram = "deno";
   };
+  denort = self.callPackage ./dodo {
+    dodo = dodo.denort;
+    mainProgram = "denort";
+  };
+  pnpm = self.callPackage ./pnpm { };
 
-  denort = pkgs.callPackage ./denort/default.nix { };
-
-  pkgs' = import sources.nixpkgs {
-    overlays = [
-      (self: super: {
-        inherit
-          buildDenoPackage
-          fetch-deno-deps-scripts
-          fetchDenoDeps
-          ;
-      })
-    ];
-  };
-
-  tests = pkgs'.callPackage ./tests/default.nix { };
-in
-{
-  lib = {
-    inherit
-      fetchDenoDeps
-      buildDenoPackage
-      denoHooks
-      ;
-  };
-  packages = {
-    inherit denort;
-    wasmbuildHook = pkgs.callPackage ./build-deno-package/hooks/wasmbuild.nix { };
-  };
-  checks = {
-    inherit tests;
-  };
-}
+  denoHooks = self.callPackage ./build-deno-package/hooks { };
+  wasmbuildHook = self.callPackage ./build-deno-package/hooks/wasmbuild.nix { };
+  buildDenoPackage = self.callPackage ./build-deno-package { };
+})

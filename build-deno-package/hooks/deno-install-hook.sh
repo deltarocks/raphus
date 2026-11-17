@@ -6,13 +6,8 @@ denoInstallHook() {
   runHook preInstall
 
   if [ -n "${binaryEntrypointPath-}" ]; then
-    package_name=$(jq -r '.name' deno.json)
-    if [ "$package_name" == "null" ]; then
-      package_name="${pname:-$name}"
-    fi
-
     mkdir -p "$out/bin"
-    cp "$package_name"* "$out/bin"
+    cp "$NIX_BUILD_TOP/deno-compile/"* "$out/bin"
   else
     echo
     echo "ERROR: nothing to do in installPhase"

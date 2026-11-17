@@ -1,204 +1,144 @@
 # NOTE: much of this structure is inspired from https://github.com/NixOS/nixpkgs/tree/fff29a3e5f7991512e790617d1a693df5f3550f6/pkgs/build-support/node
 {
-  stdenvNoCC,
-  deno,
-  diffutils,
-  zip,
-  jq,
-  fetchDenoDeps,
-  denoHooks,
   lib,
-  callPackage,
+  stdenvNoCC,
   rustPlatform,
+  importPnpmLock,
+  iplConfigHook,
+  deno,
+  denort,
+  pnpm,
+  denoHooks,
+  wasmbuildHook,
 }:
-let
-  vendorJsonName = "vendor.json";
-  npmJsonName = "npm.json";
-  denoDir = ".deno";
-  vendorDir = "vendor";
-in
-{
-  name ? "${args.pname}-${args.version}",
-  src ? null,
-  # The output hash of the dependencies for this project.
-  denoDepsHash ? lib.fakeHash,
-  # The host platform, the output binary is compiled for.
-  hostPlatform ? stdenvNoCC.hostPlatform.system,
-  # TODO: impure env vars passthru for npm tokens and deno auth tokens
-  # TODO: source overrides like in buildNpmPackage
-  denoDeps ? fetchDenoDeps {
-    denoLock = src + "/deno.lock";
-    pname = "${name}-deno-deps";
-    hash = denoDepsHash;
-  },
-  # The package used for every deno command in the build
-  denoPackage ? deno,
-  # The package used as the runtime that is bundled with the the src to create the binary.
-  denortPackage ? (import ../denort/default.nix { deno = denoPackage; }),
-  # The script to run to build the project.
-  # You still need to specify in the installPhase, what artifacts to copy to `$out`.
-  denoTaskScript ? "build",
-  # If not null, create a binary using the specified path as the entrypoint,
-  # copy it to `$out/bin` in installPhase and fix it in fixupPhase.
-  binaryEntrypointPath ? null,
-  # Flags to pass to all deno commands.
-  denoFlags ? [ ],
-  # Flags to pass to `deno task [denoTaskFlags] ${denoTaskScript}`.
-  denoTaskFlags ? [ ],
-  # Flags to pass to `deno compile [denoTaskFlags] ${binaryEntrypointPath}`.
-  denoCompileFlags ? [ "--no-check" ],
-  # Flags to pass to `deno install [denoInstallFlags]`.
-  denoInstallFlags ? [
-    "--frozen"
-    "--cached-only"
-  ],
-  # Flags to pass to `deno task [denoTaskFlags] ${denoTaskScript} [extraTaskFlags]`.
-  extraTaskFlags ? [ ],
-  # Flags to pass to `deno compile [denoTaskFlags] ${binaryEntrypointPath} [extraCompileFlags]`.
-  extraCompileFlags ? [ ],
-  nativeBuildInputs ? [ ],
-  dontFixup ? true,
-  # Custom denoConfigHook
-  denoConfigHook ? null,
-  # Custom denoBuildHook
-  denoBuildHook ? null,
-  # Custom denoInstallHook
-  denoInstallHook ? null,
-  # Path to deno workspace, where the denoTaskScript should be run, also used when compiling
-  denoWorkspacePath ? null,
-  # Unquoted string injected before `deno task`
-  denoTaskPrefix ? "",
-  # Unquoted string injected after `deno task` and all its flags
-  denoTaskSuffix ? "",
-  # If the project links external workspaces - they need to be provided explicitly
-  denoLinks ? [ ],
-  # Crates built by @deno/wasmbuild during the build, as a list of
-  # { lockFile, cargoRoot }. Vendors cargo dependencies for offline builds and
-  # seeds wasm-opt so wasmbuild does not try to download binaryen.
-  wasmbuildCrates ? [ ],
-  # Rust toolchain with the wasm32-unknown-unknown target, required when
-  # wasmbuildCrates is non-empty. Plain nixpkgs rustc lacks the wasm32 std.
-  rustToolchain ? null,
-  ...
-}@args:
-let
+lib.extendMkDerivation {
+  constructDrv = stdenvNoCC.mkDerivation;
 
-  denoWasmbuildHook = callPackage ./hooks/wasmbuild.nix { };
-
-  inherit (callPackage ../fetch-deno-deps/scripts/deno/default.nix { }) fetch-deno-deps-scripts;
-  inherit (callPackage ../fetch-deno-deps/scripts/rust/file-structure-transformer-vendor/default.nix { })
-    file-structure-transformer-vendor
-    ;
-
-  denoFlags_ = builtins.concatStringsSep " " denoFlags;
-  denoTaskFlags_ = builtins.concatStringsSep " " denoTaskFlags;
-  denoCompileFlags_ = builtins.concatStringsSep " " denoCompileFlags;
-  denoInstallFlags_ = builtins.concatStringsSep " " denoInstallFlags;
-  extraTaskFlags_ = builtins.concatStringsSep " " extraTaskFlags;
-  extraCompileFlags_ = builtins.concatStringsSep " " extraCompileFlags;
-
-  args' = builtins.removeAttrs args [
-    "denoDepsInjectedEnvVars"
-    "denoLinks"
+  excludeDrvArgNames = [
+    "pnpmLockFile"
+    "denoPackage"
+    "denortPackage"
+    "pnpmPackage"
+    "denoBuildHook"
+    "denoInstallHook"
+    "denoTaskPrefix"
+    "denoTaskSuffix"
     "wasmbuildCrates"
     "rustToolchain"
   ];
 
-  wasmbuildCargoConfigs = lib.concatMapStrings (
-    crate:
+  extendDrvArgs =
+    finalAttrs:
+    {
+      pnpmLockFile ? finalAttrs.src + "/pnpm-lock.yaml",
+      mitmCache ? importPnpmLock {
+        inherit (finalAttrs) pname version;
+        lockFile = pnpmLockFile;
+        useBuiltinFetchurl = true;
+      },
+      # The package used for every deno command in the build
+      denoPackage ? deno,
+      denortPackage ? denort,
+      pnpmPackage ? pnpm,
+      # The script to run to build the project.
+      # You still need to specify in the installPhase, what artifacts to copy to `$out`.
+      denoTaskScript ? "build",
+      # If not null, create a binary using the specified path as the entrypoint,
+      # copy it to `$out/bin` in installPhase and fix it in fixupPhase.
+      binaryEntrypointPath ? null,
+      # Flags to pass to all deno commands.
+      denoFlags ? [ ],
+      # Flags to pass to `deno task [denoTaskFlags] ${denoTaskScript}`.
+      denoTaskFlags ? [ ],
+      # Flags to pass to `deno compile [denoTaskFlags] ${binaryEntrypointPath}`.
+      denoCompileFlags ? [ "--no-check" ],
+      # Flags to pass to `deno task [denoTaskFlags] ${denoTaskScript} [extraTaskFlags]`.
+      extraTaskFlags ? [ ],
+      # Flags to pass to `deno compile [denoTaskFlags] ${binaryEntrypointPath} [extraCompileFlags]`.
+      extraCompileFlags ? [ ],
+      nativeBuildInputs ? [ ],
+      dontFixup ? true,
+      dontPatchELF ? true,
+      dontStrip ? true,
+      # Custom denoBuildHook
+      denoBuildHook ? null,
+      # Custom denoInstallHook
+      denoInstallHook ? null,
+      # Path to deno workspace, where the denoTaskScript should be run, also used when compiling
+      denoWorkspacePath ? null,
+      # Unquoted string injected before `deno task`
+      denoTaskPrefix ? "",
+      # Unquoted string injected after `deno task` and all its flags
+      denoTaskSuffix ? "",
+      # Crates built by @deno/wasmbuild during the build, as a list of
+      # { lockFile, cargoRoot }. Vendors cargo dependencies for offline builds and
+      # seeds wasm-opt so wasmbuild does not try to download binaryen.
+      wasmbuildCrates ? [ ],
+      # Rust toolchain with the wasm32-unknown-unknown target, required when
+      # wasmbuildCrates is non-empty. Plain nixpkgs rustc lacks the wasm32 std.
+      rustToolchain ? null,
+      ...
+    }@args:
     let
-      vendor = rustPlatform.importCargoLock { inherit (crate) lockFile; };
+      wasmbuildCargoConfigs = lib.concatMapStrings (
+        crate:
+        let
+          vendor = rustPlatform.importCargoLock { inherit (crate) lockFile; };
+        in
+        ''
+          mkdir -p ${lib.escapeShellArg crate.cargoRoot}/.cargo
+          cat >> ${lib.escapeShellArg crate.cargoRoot}/.cargo/config.toml <<'CARGO_VENDOR_EOF'
+          [source.crates-io]
+          replace-with = "vendored-sources"
+          [source.vendored-sources]
+          directory = "${vendor}"
+          CARGO_VENDOR_EOF
+        ''
+      ) wasmbuildCrates;
+
+      denoHooks' = denoHooks {
+        inherit denoTaskSuffix denoTaskPrefix;
+      };
     in
-    ''
-      mkdir -p ${lib.escapeShellArg crate.cargoRoot}/.cargo
-      cat >> ${lib.escapeShellArg crate.cargoRoot}/.cargo/config.toml <<'CARGO_VENDOR_EOF'
-      [source.crates-io]
-      replace-with = "vendored-sources"
-      [source.vendored-sources]
-      directory = "${vendor}"
-      CARGO_VENDOR_EOF
-    ''
-  ) wasmbuildCrates;
+    {
+      inherit
+        mitmCache
+        dontPatchELF
+        dontStrip
+        binaryEntrypointPath
+        denoTaskScript
+        denoWorkspacePath
+        denoFlags
+        denoTaskFlags
+        denoCompileFlags
+        extraTaskFlags
+        extraCompileFlags
+        ;
 
-  denoHooks' = denoHooks {
-    inherit
-      denoTaskSuffix
-      denoTaskPrefix
-      binaryEntrypointPath
-      denortPackage
-      ;
-  };
-
-  systemLookupTable = {
-    "x86_64-darwin" = "x86_64-apple-darwin";
-    "arm64-darwin" = "aarch64-apple-darwin";
-    "aarch64-darwin" = "aarch64-apple-darwin";
-    "x86_64-linux" = "x86_64-unknown-linux-gnu";
-    "arm64-linux" = "aarch64-unknown-linux-gnu";
-    "aarch64-linux" = "aarch64-unknown-linux-gnu";
-  };
-  hostPlatform_ =
-    if builtins.hasAttr hostPlatform systemLookupTable then
-      systemLookupTable."${hostPlatform}"
-    else
-      (lib.systems.elaborate hostPlatform).config;
-in
-stdenvNoCC.mkDerivation (
-  args'
-  // {
-    inherit
-      name
-      src
-      denoFlags_
-      denoTaskFlags_
-      denoCompileFlags_
-      denoInstallFlags_
-      extraTaskFlags_
-      extraCompileFlags_
-      binaryEntrypointPath
-      hostPlatform_
-      denoWorkspacePath
-      denoTaskScript
-      vendorDir
-      vendorJsonName
-      npmJsonName
-      ;
-
-    denoDeps = denoDeps.fetched;
-
-    nativeBuildInputs =
-      nativeBuildInputs
-      ++ [
+      nativeBuildInputs = [
+        denoPackage
+        pnpmPackage
+        iplConfigHook
         # Prefer passed hooks
-        (if denoConfigHook != null then denoConfigHook else denoHooks'.denoConfigHook)
         (if denoBuildHook != null then denoBuildHook else denoHooks'.denoBuildHook)
         (if denoInstallHook != null then denoInstallHook else denoHooks'.denoInstallHook)
-        denoPackage
-        diffutils
-        zip
-        jq
-        fetch-deno-deps-scripts
-        file-structure-transformer-vendor
       ]
-      ++ lib.optional (wasmbuildCrates != [ ]) denoWasmbuildHook
-      ++ lib.optional (rustToolchain != null) rustToolchain;
+      ++ lib.optional (wasmbuildCrates != [ ]) wasmbuildHook
+      ++ lib.optional (rustToolchain != null) rustToolchain
+      ++ nativeBuildInputs;
 
-    DENO_DIR = denoDir;
+      DENO_NO_UPDATE_CHECK = "1";
 
-    dontFixup = if binaryEntrypointPath != null then false else dontFixup;
+      dontFixup = if binaryEntrypointPath != null then false else dontFixup;
 
-    passthru = {
-      inherit denoDeps;
+      meta = (args.meta or { }) // {
+        platforms = args.meta.platforms or denoPackage.meta.platforms;
+      };
+    }
+    // lib.optionalAttrs (denortPackage != null) {
+      DENORT_BIN = lib.getExe' denortPackage "denort";
+    }
+    // lib.optionalAttrs (wasmbuildCrates != [ ]) {
+      postConfigure = (args.postConfigure or "") + wasmbuildCargoConfigs;
     };
-
-    meta = (args.meta or { }) // {
-      platforms = args.meta.platforms or denoPackage.meta.platforms;
-    };
-  }
-  // lib.optionalAttrs (denoLinks != [ ]) {
-    denoLinksJson = builtins.toJSON denoLinks;
-  }
-  // lib.optionalAttrs (wasmbuildCrates != [ ]) {
-    postConfigure = (args.postConfigure or "") + wasmbuildCargoConfigs;
-  }
-)
+}
