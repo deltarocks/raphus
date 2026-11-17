@@ -47,10 +47,11 @@ inputs'.raphus.legacyPackages.buildDenoPackage {
 }
 ```
 
-`DENORT_BIN` points at `denort` (`denortPackage = null` drops it), so custom
-`buildPhase`s can run `deno compile` directly. The lock file defaults to
-`src + "/pnpm-lock.yaml"`; set `pnpmLockFile` when `src` is a derivation or the
-lock lives elsewhere.
+`NODE_ENV` defaults to `production` for the build and is embedded into compiled
+binaries as a default (`NODE_ENV = null` disables it). `DENORT_BIN` points at
+`denort` (`denortPackage = null` drops it), so custom `buildPhase`s can run
+`deno compile` directly. The lock file defaults to `src + "/pnpm-lock.yaml"`;
+set `pnpmLockFile` when `src` is a derivation or the lock lives elsewhere.
 
 ## Releases
 
