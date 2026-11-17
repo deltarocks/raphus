@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  pnpm-prepare:
     dependencies:
       '@babel/core':
         specifier: ^8.0.7

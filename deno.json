@@ -1,6 +1,6 @@
 {
 	"nodeModulesDir": "manual",
-	"exclude": ["dist", "pnpm-lock.yaml"],
+	"exclude": ["**/dist", "pnpm-lock.yaml"],
 	"fmt": {
 		"useTabs": true
 	}

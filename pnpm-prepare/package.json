@@ -12,6 +12,7 @@
 		"directory": "dist",
 		"linkDirectory": false
 	},
+	"bureaucrate-extra-dirs": [".."],
 	"dependencies": {
 		"@babel/core": "^8.0.7",
 		"@babel/plugin-proposal-decorators": "^8.0.2",

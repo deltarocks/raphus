@@ -46,12 +46,34 @@
             deno
             denort
             pnpm
+            pnpm-prepare
             wasmbuildHook
             ;
         }
       );
 
-      checks = self.packages;
+      checks = forAllSystems (
+        pkgs:
+        let
+          packages = self.packages.${pkgs.stdenv.hostPlatform.system};
+        in
+        packages
+        // lib.optionalAttrs (packages ? pnpm-prepare) {
+          pnpm-prepare-self =
+            pkgs.runCommand "pnpm-prepare-self" { nativeBuildInputs = [ packages.pnpm-prepare ]; }
+              ''
+                export HOME=$TMPDIR
+                cp -r ${./pnpm-prepare} package
+                chmod -R u+w package
+                cd package
+                pnpm-prepare
+                test -f dist/mod.js
+                test -f dist/mod.d.ts
+                test -f dist/package.json
+                touch $out
+              '';
+        }
+      );
 
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
