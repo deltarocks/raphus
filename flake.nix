@@ -41,14 +41,18 @@
 
       packages = forAllSystems (
         pkgs:
+        let
+          scope = self.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+        in
         lib.filterAttrs (_: lib.meta.availableOn pkgs.stdenv.hostPlatform) {
-          inherit (self.legacyPackages.${pkgs.stdenv.hostPlatform.system})
+          inherit (scope)
             deno
             denort
             pnpm
-            pnpm-prepare
+            raphus
             wasmbuildHook
             ;
+          default = scope.raphus;
         }
       );
 
@@ -58,20 +62,19 @@
           packages = self.packages.${pkgs.stdenv.hostPlatform.system};
         in
         packages
-        // lib.optionalAttrs (packages ? pnpm-prepare) {
-          pnpm-prepare-self =
-            pkgs.runCommand "pnpm-prepare-self" { nativeBuildInputs = [ packages.pnpm-prepare ]; }
-              ''
-                export HOME=$TMPDIR
-                cp -r ${./pnpm-prepare} package
-                chmod -R u+w package
-                cd package
-                pnpm-prepare
-                test -f dist/mod.js
-                test -f dist/mod.d.ts
-                test -f dist/package.json
-                touch $out
-              '';
+        // lib.optionalAttrs (packages ? raphus) {
+          raphus-self = pkgs.runCommand "raphus-self" { nativeBuildInputs = [ packages.raphus ]; } ''
+            export HOME=$TMPDIR
+            mkdir package
+            cp ${./package.json} package/package.json
+            cp ${./mod.ts} package/mod.ts
+            cd package
+            raphus
+            test -f dist/mod.js
+            test -f dist/mod.d.ts
+            test -f dist/package.json
+            touch $out
+          '';
         }
       );
 

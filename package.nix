@@ -6,22 +6,20 @@
   makeWrapper,
 }:
 buildDenoPackage (finalAttrs: {
-  pname = "pnpm-prepare";
+  pname = "raphus";
   inherit (lib.importJSON ./package.json) version;
 
   src = lib.fileset.toSource {
-    root = ../.;
+    root = ./.;
     fileset = lib.fileset.unions [
-      ../package.json
-      ../pnpm-workspace.yaml
-      ../pnpm-lock.yaml
-      ../deno.json
       ./package.json
+      ./pnpm-workspace.yaml
+      ./pnpm-lock.yaml
+      ./deno.json
       ./mod.ts
     ];
   };
 
-  denoWorkspacePath = "pnpm-prepare";
   binaryEntrypointPath = "mod.ts";
   denoCompileFlags = [
     "--no-check"
@@ -34,11 +32,11 @@ buildDenoPackage (finalAttrs: {
   nativeBuildInputs = [ makeWrapper ];
 
   postFixup = ''
-    wrapProgram $out/bin/pnpm-prepare --prefix PATH : ${lib.makeBinPath [ deno ]}
+    wrapProgram $out/bin/raphus --prefix PATH : ${lib.makeBinPath [ deno ]}
   '';
 
   meta = {
-    mainProgram = "pnpm-prepare";
+    mainProgram = "raphus";
     inherit (pnpm.meta) platforms;
   };
 })

@@ -14,5 +14,5 @@ pkgs.lib.makeScope pkgs.newScope (self: {
   wasmbuildHook = self.callPackage ./build-deno-package/hooks/wasmbuild.nix { };
   buildDenoPackage = self.callPackage ./build-deno-package { };
 
-  pnpm-prepare = self.callPackage ./pnpm-prepare/package.nix { };
+  raphus = self.callPackage ./package.nix { };
 })

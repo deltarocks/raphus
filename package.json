@@ -1,5 +1,30 @@
 {
-	"private": true,
+	"name": "@deltarocks/raphus",
+	"version": "0.1.0",
+	"description": "Transpile a Deno TypeScript package to JS and .d.ts before publishing",
+	"license": "MIT",
 	"type": "module",
-	"workspaces": ["pnpm-prepare"]
+	"bin": {
+		"raphus": "./mod.ts"
+	},
+	"scripts": {
+		"prepack": "deno run --allow-read --allow-write=dist --allow-env --allow-run=deno mod.ts"
+	},
+	"dependencies": {
+		"@babel/core": "^8.0.7",
+		"@babel/plugin-proposal-decorators": "^8.0.2",
+		"@babel/plugin-transform-react-jsx": "^8.0.1",
+		"@babel/preset-typescript": "^8.0.7",
+		"@std/fs": "jsr:^1.0.0",
+		"@std/yaml": "jsr:^1.0.0",
+		"typescript": "~6.0.3"
+	},
+	"devDependencies": {
+		"@types/node": "^26.6.4"
+	},
+	"publishConfig": {
+		"access": "public",
+		"directory": "dist",
+		"linkDirectory": false
+	}
 }

@@ -9,9 +9,34 @@ on [dodo](https://github.com/deltarocks/dodo).
 - `deno`, `denort`: dodo packages
 - `pnpm`: pinned pnpm binary
 - `wasmbuildHook`: seeds `wasm-opt` for `@deno/wasmbuild`
-- `pnpm-prepare`: transpiles a package to JS + `.d.ts` before `pnpm publish`
+- `raphus`: the `@deltarocks/raphus` CLI
 
 `deno.lock` dependencies are not supported.
+
+## CLI
+
+`@deltarocks/raphus` transpiles a package written for Deno to JS + `.d.ts` in
+`dist/` before `pnpm publish`:
+
+```json
+{
+	"scripts": {
+		"prepack": "raphus"
+	},
+	"publishConfig": {
+		"directory": "dist",
+		"linkDirectory": false
+	},
+	"devDependencies": {
+		"@deltarocks/raphus": "^0.1.0"
+	}
+}
+```
+
+Files reachable from `exports`, `bin` and `files` are copied or transpiled;
+`catalog:` and `workspace:` dependency specs are resolved. It needs `deno` on
+`PATH`, and its `@std/*` dependencies come from JSR, so consumers need
+`@jsr:registry=https://npm.jsr.io/` in `.npmrc`.
 
 ## Usage
 
