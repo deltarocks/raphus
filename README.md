@@ -35,7 +35,8 @@ on [dodo](https://github.com/deltarocks/dodo).
 
 Files reachable from `exports`, `bin` and `files` are copied or transpiled;
 `catalog:` and `workspace:` dependency specs are resolved. It needs `deno` on
-`PATH`, and its `@std/*` dependencies come from JSR, so consumers need
+`PATH`. Its `@std/*` dependencies come from JSR as `npm:@jsr/*` aliases: pnpm
+resolves them out of the box, other clients need
 `@jsr:registry=https://npm.jsr.io/` in `.npmrc`.
 
 ## Usage
