@@ -7,7 +7,7 @@ on [dodo](https://github.com/deltarocks/dodo).
   [importPnpmLock](https://github.com/Scrumplex/importPnpmLock.nix) (no
   dependency hash), then runs `deno task` or `deno compile`
 - `deno`, `denort`: dodo packages
-- `pnpm`: pinned pnpm binary
+- `pnpm`: nixpkgs `pnpm_12`
 - `wasmbuildHook`: seeds `wasm-opt` for `@deno/wasmbuild`
 - `raphus`: the `@deltarocks/raphus` CLI
 
