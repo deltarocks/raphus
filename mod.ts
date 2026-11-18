@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write=dist --allow-env --allow-run=deno
+#!/usr/bin/env -S deno run --node-modules-dir=manual --allow-read --allow-write=dist --allow-env --allow-run=deno
 import ts from "typescript";
 import {
 	type PluginItem,

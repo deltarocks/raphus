@@ -1,6 +1,6 @@
 {
 	"name": "@deltarocks/raphus",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Transpile a Deno TypeScript package to JS and .d.ts before publishing",
 	"license": "MIT",
 	"type": "module",
