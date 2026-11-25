@@ -45,15 +45,16 @@
         "systems": "systems_2"
       },
       "locked": {
-        "lastModified": 1792350750,
-        "rev": "d411de85f1709f6e685397cb74c302cefaad831b",
-        "revCount": 33,
-        "type": "git",
-        "url": "file:///home/lach/Projects/contrib/importPnpmLock.nix"
+        "lastModified": 1795568597,
+        "owner": "deltarocks",
+        "repo": "importPnpmLock.nix",
+        "rev": "ead49130c11c826355229cd3aa704af5a6bf31eb",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "file:///home/lach/Projects/contrib/importPnpmLock.nix"
+        "owner": "deltarocks",
+        "repo": "importPnpmLock.nix",
+        "type": "github"
       }
     },
     "nixpkgs": {

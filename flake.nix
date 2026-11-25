@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
     importPnpmLock = {
-      url = "git+file:///home/lach/Projects/contrib/importPnpmLock.nix";
+      url = "github:deltarocks/importPnpmLock.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     dodo.url = "github:deltarocks/dodo/deltarocks";
