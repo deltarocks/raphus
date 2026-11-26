@@ -22,10 +22,10 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1795587802,
+        "lastModified": 1795667850,
         "owner": "deltarocks",
         "repo": "dodo",
-        "rev": "805d25ab0157b27df0c74bda988893212746e240",
+        "rev": "147a60eb01af8a85f76632757393abd74cb59157",
         "type": "github"
       },
       "original": {
