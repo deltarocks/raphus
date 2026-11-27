@@ -48,6 +48,7 @@
           inherit (scope)
             deno
             denort
+            deno-desktop
             pnpm
             raphus
             wasmbuildHook
